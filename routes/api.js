@@ -116,7 +116,7 @@ module.exports = function(app) {
     .get(async (req, res, next) => {
       // get the board
       const board = await getBoard(req.params.board);
-      console.log('board :', board);
+
       // get the threads that are referenced in the board.threads array
       const threads = await Thread.find({ _id: { $in: board.threads } })
         // sort them by bumped_on date in desc order
@@ -129,33 +129,51 @@ module.exports = function(app) {
       res.status(200).send(threads);
     });
 
-  app.route('/api/replies/:board').post(async (req, res, next) => {
-    // destructure the data from the req objects
-    const { text, delete_password, thread_id } = req.body;
+  app
+    .route('/api/replies/:board')
+    .post(async (req, res, next) => {
+      // destructure the data from the req objects
+      const { text, delete_password, thread_id } = req.body;
 
-    // get the thread
-    const thread = await Thread.findOne({ _id: thread_id });
+      // get the thread
+      const thread = await Thread.findOne({ _id: thread_id });
 
-    // create a new reply from the destructured data
-    const newReply = new Reply({
-      text,
-      delete_password
+      // create a new reply from the destructured data
+      const newReply = new Reply({
+        text,
+        delete_password
+      });
+
+      //save the new Reply
+      const savedReply = await newReply.save();
+
+      // add the reply to the replies array on the thread
+      thread.replies.push(savedReply);
+
+      // update the threads bumped_on value
+      thread.bumped_on = savedReply.created_on;
+
+      //save the updated thread
+      await thread.save();
+
+      res.status(200).send(thread);
+      // redirect to the corresponding thread
+      // res.status(302).redirect(`/b/${req.params.board}/${thread_id}`);
+    })
+    .get(async (req, res, next) => {
+      // get the thread_id from the query
+      const { thread_id } = req.query;
+
+      // get the thread
+      const thread = await Thread.findOne({ _id: thread_id });
+
+      // get the threads replies
+      const replies = await Reply.find({ _id: { $in: thread.replies } })
+        // sort them by bumped_on date in desc order
+        .sort({
+          bumped_on: -1
+        });
+      // send the sorted replies to the client
+      res.status(200).send(replies);
     });
-
-    //save the new Reply
-    const savedReply = await newReply.save();
-
-    // add the reply to the replies array on the thread
-    thread.replies.push(savedReply);
-
-    // update the threads bumped_on value
-    thread.bumped_on = savedReply.created_on;
-
-    //save the updated thread
-    await thread.save();
-
-    res.status(200).send(thread);
-    // redirect to the corresponding thread
-    // res.status(302).redirect(`/b/${req.params.board}/${thread_id}`);
-  });
 };
