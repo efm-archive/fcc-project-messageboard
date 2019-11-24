@@ -1,19 +1,116 @@
 /*
-*
-*
-*       Complete the API routing below
-*
-*
-*/
+ *
+ *
+ *       Complete the API routing below
+ *
+ *
+ */
 
 'use strict';
 
 var expect = require('chai').expect;
+const mongoose = require('mongoose');
+require('dotenv').config();
 
-module.exports = function (app) {
-  
-  app.route('/api/threads/:board');
-    
-  app.route('/api/replies/:board');
+const MONGODB_CONNECTION_STRING = process.env.DB;
+//Example connection: MongoClient.connect(MONGODB_CONNECTION_STRING, function(err, db) {});
 
+module.exports = function(app) {
+  mongoose.connect(
+    MONGODB_CONNECTION_STRING,
+    {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    },
+    (err, db) => {
+      if (err) {
+        console.log('Database error: ' + err);
+      } else {
+        console.log('Successful database connection');
+      }
+    }
+  );
+
+  const Schema = mongoose.Schema;
+
+  const replySchema = new Schema({
+    text: { type: String },
+    created_on: { type: Date, default: Date.now },
+    reported: Boolean,
+    delete_password: { type: String, required: true }
+  });
+
+  const threadSchema = new Schema({
+    text: { type: String, required: true },
+    created_on: { type: Date, default: Date.now },
+    bumped_on: { type: Date, default: Date.now },
+    reported: Boolean,
+    delete_password: { type: String, required: true },
+    replies: [replySchema]
+  });
+
+  const boardSchema = new Schema({
+    name: { type: String, required: true },
+    threads: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Thread'
+      }
+    ]
+  });
+
+  const Board = mongoose.model('Board', boardSchema);
+  const Thread = mongoose.model('Thread', threadSchema);
+  const Reply = mongoose.model('Reply', replySchema);
+
+  const getBoard = async name => {
+    // try to find a board with the given name
+    const board = await Board.findOne({ name });
+    // if there is no board
+    if (!board) {
+      //create a new board
+      const newBoard = new Board({
+        name
+      });
+      // console.log('no board found, so creating new board "' + name + '"');
+
+      // save and return the new board
+      return await newBoard.save();
+    } else {
+      // return the found board
+      return board;
+    }
+  };
+
+  app.route('/api/threads/:board').post(async (req, res, next) => {
+    // destructure the data from the req objects
+    const { text, delete_password } = req.body;
+
+    // get the board
+    const board = await getBoard(req.params.board);
+
+    // create a new Thread with the destrutured data
+    const newThread = new Thread({
+      text,
+      delete_password
+    });
+
+    //save the new Thread
+    const savedThread = await newThread.save();
+    // console.log('savedThread :', savedThread);
+
+    // add the thread to the threads array on the board
+    board.threads.push(savedThread);
+
+    //save the updated board
+    await board.save();
+
+    //respond with the saved thread for dev testing
+    res.status(200).send(savedThread);
+
+    // redirect to the corresponding board
+    // res.status(302).redirect(`/b/${req.params.board}`);
+  });
+
+  app.route('/api/replies/:board').post(async (req, res, next) => {});
 };
