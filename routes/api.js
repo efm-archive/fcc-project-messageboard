@@ -36,16 +36,16 @@ module.exports = function(app) {
   const replySchema = new Schema({
     text: { type: String },
     created_on: { type: Date, default: Date.now },
-    delete_password: { type: String, required: true },
-    reported: Boolean
+    delete_password: { type: String, required: true, select: false },
+    reported: { type: Boolean, default: false, select: false }
   });
 
   const threadSchema = new Schema({
     text: { type: String, required: true },
     created_on: { type: Date, default: Date.now },
     bumped_on: { type: Date, default: Date.now },
-    reported: Boolean,
-    delete_password: { type: String, required: true },
+    delete_password: { type: String, required: true, select: false },
+    reported: { type: Boolean, default: false, select: false },
     replies: [replySchema]
   });
 
@@ -82,35 +82,52 @@ module.exports = function(app) {
     }
   };
 
-  app.route('/api/threads/:board').post(async (req, res, next) => {
-    // destructure the data from the req objects
-    const { text, delete_password } = req.body;
+  app
+    .route('/api/threads/:board')
+    .post(async (req, res, next) => {
+      // destructure the data from the req objects
+      const { text, delete_password } = req.body;
 
-    // get the board
-    const board = await getBoard(req.params.board);
+      // get the board
+      const board = await getBoard(req.params.board);
 
-    // create a new Thread with the destrutured data
-    const newThread = new Thread({
-      text,
-      delete_password
+      // create a new Thread with the destrutured data
+      const newThread = new Thread({
+        text,
+        delete_password
+      });
+
+      //save the new Thread
+      const savedThread = await newThread.save();
+      // console.log('savedThread :', savedThread);
+
+      // add the thread to the threads array on the board
+      board.threads.push(savedThread);
+
+      //save the updated board
+      await board.save();
+
+      //respond with the saved thread for dev testing
+      res.status(200).send(savedThread);
+
+      // redirect to the corresponding board
+      // res.status(302).redirect(`/b/${req.params.board}`);
+    })
+    .get(async (req, res, next) => {
+      // get the board
+      const board = await getBoard(req.params.board);
+      console.log('board :', board);
+      // get the threads that are referenced in the board.threads array
+      const threads = await Thread.find({ _id: { $in: board.threads } })
+        // sort them by bumped_on date in desc order
+        .sort({
+          bumped_on: -1
+        })
+        //limit the results to 10
+        .limit(10);
+      // send the filtered threads to the client
+      res.status(200).send(threads);
     });
-
-    //save the new Thread
-    const savedThread = await newThread.save();
-    // console.log('savedThread :', savedThread);
-
-    // add the thread to the threads array on the board
-    board.threads.push(savedThread);
-
-    //save the updated board
-    await board.save();
-
-    //respond with the saved thread for dev testing
-    res.status(200).send(savedThread);
-
-    // redirect to the corresponding board
-    // res.status(302).redirect(`/b/${req.params.board}`);
-  });
 
   app.route('/api/replies/:board').post(async (req, res, next) => {
     // destructure the data from the req objects
