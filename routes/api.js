@@ -127,6 +127,28 @@ module.exports = function(app) {
         .limit(10);
       // send the filtered threads to the client
       res.status(200).send(threads);
+    })
+    .delete(async (req, res, next) => {
+      // destructure the data from the req.body
+      const { delete_password, thread_id } = req.body;
+
+      // get the thread with the passed in thread_id and select the delete_password field
+      const thread = await Thread.findOne(
+        { _id: thread_id },
+        'delete_password',
+        (err, doc) => {}
+      );
+
+      // if the passwords match
+      if (delete_password === thread.delete_password) {
+        // delete the thread
+        await thread.deleteOne();
+        // respond with status 200 and 'success'
+        res.status(200).send('success');
+      } else {
+        // respond with status 400 and 'incorrect password'
+        res.status(400).send('incorrect password');
+      }
     });
 
   app
