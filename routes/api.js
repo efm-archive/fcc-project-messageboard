@@ -36,8 +36,8 @@ module.exports = function(app) {
   const replySchema = new Schema({
     text: { type: String },
     created_on: { type: Date, default: Date.now },
-    reported: Boolean,
-    delete_password: { type: String, required: true }
+    delete_password: { type: String, required: true },
+    reported: Boolean
   });
 
   const threadSchema = new Schema({
@@ -112,5 +112,33 @@ module.exports = function(app) {
     // res.status(302).redirect(`/b/${req.params.board}`);
   });
 
-  app.route('/api/replies/:board').post(async (req, res, next) => {});
+  app.route('/api/replies/:board').post(async (req, res, next) => {
+    // destructure the data from the req objects
+    const { text, delete_password, thread_id } = req.body;
+
+    // get the thread
+    const thread = await Thread.findOne({ _id: thread_id });
+
+    // create a new reply from the destructured data
+    const newReply = new Reply({
+      text,
+      delete_password
+    });
+
+    //save the new Reply
+    const savedReply = await newReply.save();
+
+    // add the reply to the replies array on the thread
+    thread.replies.push(savedReply);
+
+    // update the threads bumped_on value
+    thread.bumped_on = savedReply.created_on;
+
+    //save the updated thread
+    await thread.save();
+
+    res.status(200).send(thread);
+    // redirect to the corresponding thread
+    // res.status(302).redirect(`/b/${req.params.board}/${thread_id}`);
+  });
 };
