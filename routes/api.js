@@ -46,7 +46,12 @@ module.exports = function(app) {
     bumped_on: { type: Date, default: Date.now },
     delete_password: { type: String, required: true, select: false },
     reported: { type: Boolean, default: false, select: false },
-    replies: [replySchema]
+    replies: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Reply'
+      }
+    ]
   });
 
   const boardSchema = new Schema({
@@ -119,12 +124,16 @@ module.exports = function(app) {
 
       // get the threads that are referenced in the board.threads array
       const threads = await Thread.find({ _id: { $in: board.threads } })
+
         // sort them by bumped_on date in desc order
         .sort({
           bumped_on: -1
         })
         //limit the results to 10
-        .limit(10);
+        .limit(10)
+        .populate('replies')
+        .exec();
+
       // send the filtered threads to the client
       res.status(200).send(threads);
     })
@@ -135,9 +144,8 @@ module.exports = function(app) {
       // get the thread with the passed in thread_id and select the delete_password field
       const thread = await Thread.findOne(
         { _id: thread_id },
-        'delete_password',
-        (err, doc) => {}
-      );
+        'delete_password'
+      ).exec();
 
       // if the passwords match
       if (delete_password === thread.delete_password) {
@@ -158,7 +166,7 @@ module.exports = function(app) {
       const { text, delete_password, thread_id } = req.body;
 
       // get the thread
-      const thread = await Thread.findOne({ _id: thread_id });
+      const thread = await Thread.findOne({ _id: thread_id }).exec();
 
       // create a new reply from the destructured data
       const newReply = new Reply({
@@ -186,16 +194,42 @@ module.exports = function(app) {
       // get the thread_id from the query
       const { thread_id } = req.query;
 
-      // get the thread
-      const thread = await Thread.findOne({ _id: thread_id });
+      // get the thread an populate the replies array with it's data
+      const thread = await Thread.findOne({ _id: thread_id })
+        .populate('replies')
+        .exec();
 
-      // get the threads replies
-      const replies = await Reply.find({ _id: { $in: thread.replies } })
-        // sort them by bumped_on date in desc order
-        .sort({
-          bumped_on: -1
-        });
-      // send the sorted replies to the client
-      res.status(200).send(replies);
+      // send the populated thread to the client
+      res.status(200).send(thread);
+    })
+    .delete(async (req, res, next) => {
+      // destructure the data from the req.body
+      const { delete_password, thread_id, reply_id } = req.body;
+
+      // get the thread with the passed in thread_id
+      const threadPromise = Thread.findOne({ _id: thread_id }).exec();
+      // get the reply with the passed in reply_id and select the delete_password field
+      const replyPromise = Reply.findOne(
+        { _id: reply_id },
+        'delete_password text'
+      ).exec();
+
+      const thread = await threadPromise;
+      const reply = await replyPromise;
+
+      console.log('thread :', thread);
+
+      // if the passwords match
+      if (delete_password === reply.delete_password) {
+        // change the text to [deleted]
+        reply.text = '[deleted]';
+        // save the updated/"deleted" reply
+        await reply.save();
+        //  respond with status 200 and 'success'
+        res.status(200).send('success');
+      } else {
+        // respond with status 400 and 'incorrect password'
+        res.status(400).send('incorrect password');
+      }
     });
 };
