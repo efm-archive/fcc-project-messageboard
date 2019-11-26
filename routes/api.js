@@ -10,6 +10,7 @@
 
 var expect = require('chai').expect;
 const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 require('dotenv').config();
 
 const MONGODB_CONNECTION_STRING = process.env.DB;
@@ -96,13 +97,16 @@ module.exports = function(app) {
       // destructure the data from the req objects
       const { text, delete_password } = req.body;
 
+      // hash the password with bcrypt
+      const hashedPW = await bcrypt.hash(delete_password, 10);
+
       // get the board
       const board = await getBoard(req.params.board);
 
       // create a new Thread with the destrutured data
       const newThread = new Thread({
         text,
-        delete_password
+        delete_password: hashedPW
       });
 
       //save the new Thread
@@ -114,9 +118,6 @@ module.exports = function(app) {
 
       //save the updated board
       await board.save();
-
-      //respond with the saved thread for dev testing
-      // res.status(200).send(savedThread);
 
       // redirect to the corresponding board
       res.status(302).redirect(`/b/${req.params.board}/`);
@@ -164,8 +165,8 @@ module.exports = function(app) {
         'delete_password'
       ).exec();
 
-      // if the passwords match
-      if (delete_password === thread.delete_password) {
+      // if the passwords match (compared with brcypt.compare() method)
+      if (await bcrypt.compare(delete_password, thread.delete_password)) {
         // delete the thread
         await thread.deleteOne();
         // respond with status 200 and 'success'
@@ -198,13 +199,16 @@ module.exports = function(app) {
       // destructure the data from the req objects
       const { text, delete_password, thread_id } = req.body;
 
+      // hash the password with bcrypt
+      const hashedPW = await bcrypt.hash(delete_password, 10);
+
       // get the thread
       const thread = await Thread.findOne({ _id: thread_id }).exec();
 
       // create a new reply from the destructured data
       const newReply = new Reply({
         text,
-        delete_password
+        delete_password: hashedPW
       });
 
       //save the new Reply
@@ -219,8 +223,6 @@ module.exports = function(app) {
       //save the updated thread
       await thread.save();
 
-      // res.status(200).send(thread);
-      // redirect to the corresponding thread
       res
         .status(302)
         .redirect(`/b/${req.params.board}/?thread_id=${thread_id}`);
@@ -253,10 +255,8 @@ module.exports = function(app) {
       const thread = await threadPromise;
       const reply = await replyPromise;
 
-      // console.log('thread :', thread);
-
-      // if the passwords match
-      if (delete_password === reply.delete_password) {
+      // if the passwords match (compared with brcypt.compare() method)
+      if (await bcrypt.compare(delete_password, reply.delete_password)) {
         // change the text to [deleted]
         reply.text = '[deleted]';
         // save the updated/"deleted" reply
