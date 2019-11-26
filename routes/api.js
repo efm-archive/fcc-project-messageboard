@@ -175,7 +175,22 @@ module.exports = function(app) {
         res.status(400).send('incorrect password');
       }
     })
-    .put(async (req, res, next) => {});
+    .put(async (req, res, next) => {
+      // destructure the thread_id (and report_id) from the req.body
+      const { thread_id, report_id } = req.body;
+
+      // get the thread by the passed in id, then set reported to true
+      const thread = await Thread.findByIdAndUpdate(
+        { _id: thread_id || report_id },
+        { $set: { reported: 'true' } },
+        { useFindAndModify: false }
+      );
+
+      // save the modified thread
+      thread.save();
+      // respond with a success message
+      res.status(200).send('success');
+    });
 
   app
     .route('/api/replies/:board')
@@ -238,7 +253,7 @@ module.exports = function(app) {
       const thread = await threadPromise;
       const reply = await replyPromise;
 
-      console.log('thread :', thread);
+      // console.log('thread :', thread);
 
       // if the passwords match
       if (delete_password === reply.delete_password) {
@@ -253,5 +268,20 @@ module.exports = function(app) {
         res.status(400).send('incorrect password');
       }
     })
-    .put(async (req, res, next) => {});
+    .put(async (req, res, next) => {
+      // destructure the reply_id & the thread_id from the req.body
+      const { reply_id, thread_id } = req.body;
+
+      // get the reply by its id, then set reported to true
+      const reply = await Reply.findByIdAndUpdate(
+        { _id: reply_id },
+        { $set: { reported: 'true' } },
+        { useFindAndModify: false }
+      );
+
+      // save the modified reply
+      reply.save();
+      // respond with a success message
+      res.status(200).send('success');
+    });
 };
