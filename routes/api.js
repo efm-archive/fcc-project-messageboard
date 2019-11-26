@@ -40,19 +40,22 @@ module.exports = function(app) {
     reported: { type: Boolean, default: false, select: false }
   });
 
-  const threadSchema = new Schema({
-    text: { type: String, required: true },
-    created_on: { type: Date, default: Date.now },
-    bumped_on: { type: Date, default: Date.now },
-    delete_password: { type: String, required: true, select: false },
-    reported: { type: Boolean, default: false, select: false },
-    replies: [
-      {
-        type: Schema.Types.ObjectId,
-        ref: 'Reply'
-      }
-    ]
-  });
+  const threadSchema = new Schema(
+    {
+      text: { type: String, required: true },
+      created_on: { type: Date, default: Date.now },
+      bumped_on: { type: Date, default: Date.now },
+      delete_password: { type: String, required: true, select: false },
+      reported: { type: Boolean, default: false, select: false },
+      replies: [
+        {
+          type: Schema.Types.ObjectId,
+          ref: 'Reply'
+        }
+      ]
+    }
+    // { toJSON: { virtuals: true }, toObject: { virtuals: true } }
+  );
 
   const boardSchema = new Schema({
     name: { type: String, required: true },
@@ -113,14 +116,14 @@ module.exports = function(app) {
       await board.save();
 
       //respond with the saved thread for dev testing
-      res.status(200).send(savedThread);
+      // res.status(200).send(savedThread);
 
       // redirect to the corresponding board
-      // res.status(302).redirect(`/b/${req.params.board}`);
+      res.status(302).redirect(`/b/${req.params.board}/`);
     })
     .get(async (req, res, next) => {
       // get the board
-      const board = await getBoard(req.params.board);
+      const board = await getBoard(req.params.board || req.body.board);
 
       // get the threads that are referenced in the board.threads array
       const threads = await Thread.find({ _id: { $in: board.threads } })
@@ -129,10 +132,24 @@ module.exports = function(app) {
         .sort({
           bumped_on: -1
         })
-        //limit the results to 10
+        // limit the results to 10
         .limit(10)
-        .populate('replies')
+        // populate the replies array with it's data
+        .populate({ path: 'replies' })
+        // use .lean() to get a regular JS object allowing to later on add replycount and change replies array for display
+        .lean()
         .exec();
+
+      // if we have threads
+      if (threads) {
+        // loop over them
+        threads.forEach(thread => {
+          // add a replycount property and set it's length the the replies amount of replies
+          thread.replycount = thread.replies.length;
+          // return only the last three items of the replies array
+          thread.replies = thread.replies.slice(thread.replies.length - 3);
+        });
+      }
 
       // send the filtered threads to the client
       res.status(200).send(threads);
@@ -157,7 +174,8 @@ module.exports = function(app) {
         // respond with status 400 and 'incorrect password'
         res.status(400).send('incorrect password');
       }
-    });
+    })
+    .put(async (req, res, next) => {});
 
   app
     .route('/api/replies/:board')
@@ -186,9 +204,11 @@ module.exports = function(app) {
       //save the updated thread
       await thread.save();
 
-      res.status(200).send(thread);
+      // res.status(200).send(thread);
       // redirect to the corresponding thread
-      // res.status(302).redirect(`/b/${req.params.board}/${thread_id}`);
+      res
+        .status(302)
+        .redirect(`/b/${req.params.board}/?thread_id=${thread_id}`);
     })
     .get(async (req, res, next) => {
       // get the thread_id from the query
@@ -197,6 +217,7 @@ module.exports = function(app) {
       // get the thread an populate the replies array with it's data
       const thread = await Thread.findOne({ _id: thread_id })
         .populate('replies')
+        .lean()
         .exec();
 
       // send the populated thread to the client
@@ -231,5 +252,6 @@ module.exports = function(app) {
         // respond with status 400 and 'incorrect password'
         res.status(400).send('incorrect password');
       }
-    });
+    })
+    .put(async (req, res, next) => {});
 };
